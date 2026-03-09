@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 
+*.db
 *.db-shm
 *.db-wal
 
@@ -17,6 +18,8 @@ __pycache__/
 dist/
 build/
 *.spec
+
+*.zip
 
 Thumbs.db
 Desktop.ini
