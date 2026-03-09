@@ -351,6 +351,79 @@ class MarketplaceCatalogTab(QWidget):
         self.links_table.setSortingEnabled(True)
         self.links_hint.setText(f"Связей: {len(rows2)}")
 
+    def _lookup_local_product_for_mp(self, product):
+        candidates = []
+        for raw in (getattr(product, "offer_id", ""), getattr(product, "vendor_code", ""), getattr(product, "sku", "")):
+            sval = str(raw or "").strip()
+            if sval and sval not in candidates:
+                candidates.append(sval)
+        for bc in getattr(product, "barcodes", []) or []:
+            sb = str(bc or "").strip()
+            if not sb:
+                continue
+            try:
+                row = self.db.get_product_by_barcode(sb)
+            except Exception:
+                row = None
+            if row:
+                return row
+        for art in candidates:
+            try:
+                row = self.db.get_product(art)
+            except Exception:
+                row = None
+            if row:
+                return row
+        return None
+
+    def _normalize_category_text(self, value, product=None, local_row=None):
+        sval = str(value or "").strip()
+        if local_row is not None:
+            try:
+                local_cat = str(local_row["cat"]).strip()
+            except Exception:
+                local_cat = ""
+            if local_cat:
+                return local_cat
+        if sval and not sval.isdigit():
+            return sval
+        name = str(getattr(product, "name", "") or "").lower()
+        if "кольц" in name:
+            return "Кольца"
+        if "серьг" in name:
+            return "Серьги"
+        if "брасл" in name:
+            return "Браслеты"
+        if "цеп" in name:
+            return "Цепочки"
+        return sval
+
+    def _normalize_brand_text(self, value, local_row=None):
+        sval = str(value or "").strip()
+        if sval:
+            return sval
+        if local_row is not None:
+            try:
+                local_supplier = str(local_row["supplier"]).strip()
+            except Exception:
+                local_supplier = ""
+            if local_supplier:
+                return local_supplier
+        return ""
+
+    def _normalize_name_text(self, value, product=None, local_row=None):
+        sval = str(value or "").strip()
+        if local_row is not None:
+            try:
+                local_name = str(local_row["name"]).strip()
+            except Exception:
+                local_name = ""
+            if local_name:
+                return local_name
+        if sval and sval != str(getattr(product, "offer_id", "") or "").strip():
+            return sval
+        return sval
+
     def _refresh_preview(self, products):
         self.current_preview_products = list(products or [])
         self.current_preview_index = {}
@@ -361,13 +434,17 @@ class MarketplaceCatalogTab(QWidget):
             row_key = self._preview_row_key(product)
             if row_key:
                 self.current_preview_index[row_key] = product
+            local_row = self._lookup_local_product_for_mp(product)
+            disp_name = self._normalize_name_text(product.name, product, local_row)
+            disp_brand = self._normalize_brand_text(product.brand, local_row)
+            disp_cat = self._normalize_category_text(product.category, product, local_row)
             if self._selected_marketplace() == "ozon":
                 vals = [
                     product.external_id,
                     product.offer_id,
-                    product.name,
-                    product.brand,
-                    product.category,
+                    disp_name,
+                    disp_brand,
+                    disp_cat,
                     product.sku,
                     ", ".join([b for b in product.barcodes if b]),
                 ]
@@ -375,9 +452,9 @@ class MarketplaceCatalogTab(QWidget):
                 vals = [
                     product.external_id,
                     product.vendor_code,
-                    product.name,
-                    product.brand,
-                    product.category,
+                    disp_name,
+                    disp_brand,
+                    disp_cat,
                     product.offer_id or product.sku or product.external_id,
                     ", ".join([b for b in product.barcodes if b]),
                 ]
@@ -657,8 +734,9 @@ class ImportMarketplaceProductDialog(QDialog):
         self.f_art.setPlaceholderText("К001")
         self._setup_art_completer()
 
-        self.f_name = QLineEdit(self.product.name or "")
-        self.f_cat = QLineEdit(self.product.category or "")
+        existing_row = self._existing_product_row()
+        self.f_name = QLineEdit(self._initial_name(existing_row))
+        self.f_cat = QLineEdit(self._initial_category(existing_row))
 
         self.f_unit = QComboBox()
         self.f_unit.setEditable(True)
@@ -667,7 +745,7 @@ class ImportMarketplaceProductDialog(QDialog):
         self.f_min = QSpinBox()
         self.f_min.setRange(0, 999999)
 
-        self.f_supplier = QLineEdit(self.product.brand or "")
+        self.f_supplier = QLineEdit(self._initial_supplier(existing_row))
         self.f_note = QLineEdit(f"Импортировано из {'Ozon' if self.market_code == 'ozon' else 'WB'}. offer/vendor: {self.product.offer_id or self.product.vendor_code or ''}")
 
         self.f_barcode = QComboBox()
@@ -706,6 +784,72 @@ class ImportMarketplaceProductDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         v.addWidget(buttons)
+
+    def _existing_product_row(self):
+        for bc in self._extract_barcodes():
+            try:
+                row = self.db.get_product_by_barcode(str(bc).strip())
+            except Exception:
+                row = None
+            if row:
+                return row
+        for raw in (self.product.offer_id, self.product.vendor_code, self.product.sku):
+            sval = str(raw or "").strip()
+            if not sval:
+                continue
+            try:
+                row = self.db.get_product(sval)
+            except Exception:
+                row = None
+            if row:
+                return row
+        return None
+
+    def _initial_name(self, row):
+        if row is not None:
+            try:
+                local = str(row["name"]).strip()
+            except Exception:
+                local = ""
+            if local:
+                return local
+        name = str(self.product.name or "").strip()
+        if name and name != str(self.product.offer_id or "").strip():
+            return name
+        return name
+
+    def _initial_category(self, row):
+        if row is not None:
+            try:
+                local = str(row["cat"]).strip()
+            except Exception:
+                local = ""
+            if local:
+                return local
+        cat = str(self.product.category or "").strip()
+        if cat and not cat.isdigit():
+            return cat
+        name = str(self.product.name or "").lower()
+        if "кольц" in name:
+            return "Кольца"
+        if "серьг" in name:
+            return "Серьги"
+        if "брасл" in name:
+            return "Браслеты"
+        if "цеп" in name:
+            return "Цепочки"
+        return "" if cat.isdigit() else cat
+
+    def _initial_supplier(self, row):
+        if row is not None:
+            try:
+                local = str(row["supplier"]).strip()
+            except Exception:
+                local = ""
+            if local:
+                return local
+        brand = str(self.product.brand or "").strip()
+        return brand
 
     def _setup_art_completer(self):
         values = []
