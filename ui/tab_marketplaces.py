@@ -1,4 +1,7 @@
-
+"""ui/tab_marketplaces.py
+✅ ИСПРАВЛЕНО: убран self.db.connect() — метод не существует в DB-классе.
+   Теперь используется self.db.conn напрямую.
+"""
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout, QFrame,
     QComboBox, QLineEdit, QPushButton, QCheckBox,
@@ -6,11 +9,13 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt
 
+
 class MarketplacesTab(QWidget):
     def __init__(self, db, main_win=None):
         super().__init__()
         self.db = db
         self.main_win = main_win
+        self._ensure_accounts_table()
         self._build_ui()
         self.refresh()
 
@@ -82,28 +87,26 @@ class MarketplacesTab(QWidget):
         self._fill_table()
 
     def _ensure_accounts_table(self):
-        with self.db.connect() as con:
-            con.execute(
-                """
-                CREATE TABLE IF NOT EXISTS marketplace_accounts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    marketplace_code TEXT NOT NULL,
-                    account_name TEXT NOT NULL,
-                    api_key TEXT DEFAULT '',
-                    client_id TEXT DEFAULT '',
-                    is_active INTEGER DEFAULT 1,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-                )
-                """
+        # ✅ ИСПРАВЛЕНО: используем self.db.conn вместо self.db.connect()
+        self.db.conn.execute("""
+            CREATE TABLE IF NOT EXISTS marketplace_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                marketplace_code TEXT NOT NULL,
+                account_name TEXT NOT NULL,
+                api_key TEXT DEFAULT '',
+                client_id TEXT DEFAULT '',
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
-            con.commit()
+        """)
+        self.db.conn.commit()
 
     def _fill_table(self):
-        self._ensure_accounts_table()
-        with self.db.connect() as con:
-            rows = con.execute(
-                "SELECT id, marketplace_code, account_name, client_id, is_active FROM marketplace_accounts ORDER BY id DESC"
-            ).fetchall()
+        # ✅ ИСПРАВЛЕНО: используем self.db.conn напрямую
+        rows = self.db.conn.execute(
+            "SELECT id, marketplace_code, account_name, client_id, is_active "
+            "FROM marketplace_accounts ORDER BY id DESC"
+        ).fetchall()
 
         self.table.setRowCount(len(rows))
         for r, row in enumerate(rows):
@@ -119,11 +122,12 @@ class MarketplacesTab(QWidget):
         if not items:
             return
         acc_id = int(items[0].text())
-        with self.db.connect() as con:
-            row = con.execute(
-                "SELECT id, marketplace_code, account_name, api_key, client_id, is_active FROM marketplace_accounts WHERE id = ?",
-                (acc_id,)
-            ).fetchone()
+        # ✅ ИСПРАВЛЕНО: используем self.db.conn
+        row = self.db.conn.execute(
+            "SELECT id, marketplace_code, account_name, api_key, client_id, is_active "
+            "FROM marketplace_accounts WHERE id = ?",
+            (acc_id,)
+        ).fetchone()
         if not row:
             return
         self.cb_market.setCurrentText(row[1])
@@ -133,7 +137,6 @@ class MarketplacesTab(QWidget):
         self.chk_active.setChecked(bool(row[5]))
 
     def _save_account(self):
-        self._ensure_accounts_table()
         market = self.cb_market.currentText().strip()
         name = self.ed_name.text().strip()
         api_key = self.ed_api_key.text().strip()
@@ -144,19 +147,22 @@ class MarketplacesTab(QWidget):
             return
 
         selected = self.table.selectedItems()
-        with self.db.connect() as con:
-            if selected:
-                acc_id = int(selected[0].text())
-                con.execute(
-                    "UPDATE marketplace_accounts SET marketplace_code=?, account_name=?, api_key=?, client_id=?, is_active=? WHERE id=?",
-                    (market, name, api_key, client_id, is_active, acc_id)
-                )
-            else:
-                con.execute(
-                    "INSERT INTO marketplace_accounts (marketplace_code, account_name, api_key, client_id, is_active) VALUES (?, ?, ?, ?, ?)",
-                    (market, name, api_key, client_id, is_active)
-                )
-            con.commit()
+        # ✅ ИСПРАВЛЕНО: используем self.db.conn
+        if selected:
+            acc_id = int(selected[0].text())
+            self.db.conn.execute(
+                "UPDATE marketplace_accounts SET marketplace_code=?, account_name=?, "
+                "api_key=?, client_id=?, is_active=? WHERE id=?",
+                (market, name, api_key, client_id, is_active, acc_id)
+            )
+        else:
+            self.db.conn.execute(
+                "INSERT INTO marketplace_accounts "
+                "(marketplace_code, account_name, api_key, client_id, is_active) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (market, name, api_key, client_id, is_active)
+            )
+        self.db.conn.commit()
         self.refresh()
         QMessageBox.information(self, "Смарт Склад", "Аккаунт сохранён.")
 
@@ -166,9 +172,9 @@ class MarketplacesTab(QWidget):
             QMessageBox.warning(self, "Смарт Склад", "Выбери аккаунт в таблице.")
             return
         acc_id = int(selected[0].text())
-        with self.db.connect() as con:
-            con.execute("DELETE FROM marketplace_accounts WHERE id = ?", (acc_id,))
-            con.commit()
+        # ✅ ИСПРАВЛЕНО: используем self.db.conn
+        self.db.conn.execute("DELETE FROM marketplace_accounts WHERE id = ?", (acc_id,))
+        self.db.conn.commit()
         self.ed_name.clear()
         self.ed_api_key.clear()
         self.ed_client_id.clear()
@@ -180,5 +186,6 @@ class MarketplacesTab(QWidget):
         QMessageBox.information(
             self,
             "Смарт Склад",
-            "Архитектура маркетплейсов подключена. Реальные API-вызовы добавим следующим шагом."
+            "Архитектура маркетплейсов подключена.\n"
+            "Для полноценной проверки API используй вкладку 🔄 Маркетплейсы."
         )

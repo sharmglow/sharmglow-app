@@ -113,8 +113,6 @@ class MainWindow(QMainWindow):
         self.tabs.setDocumentMode(True)
         layout.addWidget(self.tabs)
 
-        # Пока вкладки продолжают работать через self.db.
-        # Это безопасный переходный этап.
         self.tab_scanner = ScannerTab(self.db, self)
         self.tab_stock = StockTab(self.db, self)
         self.tab_products = ProductsTab(self.db, self)
@@ -122,7 +120,10 @@ class MainWindow(QMainWindow):
         self.tab_warehouses = WarehousesTab(self.db, self)
         self.tab_labels = LabelsTab(self.db, self)
         self.tab_sync = SyncTab(self.db, self)
-        self.tab_market_catalog = MarketplaceCatalogTab(self.db, self)
+
+        # ✅ ИСПРАВЛЕНО: передаём ctx если есть, иначе db
+        # MarketplaceCatalogTab требует AppContext для работы сервисов
+        self.tab_market_catalog = MarketplaceCatalogTab(self.ctx or self.db, self)
 
         self.tabs.addTab(self.tab_scanner, "🔍  Сканер")
         self.tabs.addTab(self.tab_stock, "📊  Остатки")

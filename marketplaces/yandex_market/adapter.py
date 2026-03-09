@@ -1,14 +1,12 @@
-from __future__ import annotations
-
-from marketplaces.base import MarketplaceAdapter
-
+from marketplaces.base import MarketplaceAdapter, MarketplaceCredentials, MarketplaceProduct
+from typing import List
 
 class YandexMarketAdapter(MarketplaceAdapter):
     code = "yandex_market"
     display_name = "Яндекс Маркет"
 
     def validate_credentials(self, credentials=None):
-        return True, "Каркас адаптера Яндекс Маркета подключен"
+        return False, "Яндекс Маркет: интеграция в разработке"
 
-    def fetch_products(self, credentials=None):
+    def fetch_products(self, credentials=None) -> List[MarketplaceProduct]:
         return []

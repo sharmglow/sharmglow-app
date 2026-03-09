@@ -122,7 +122,7 @@ class HistoryTab(QWidget):
             total += len(rows)
 
         if show_mov:
-            rows = self.db.get_moves(q, self._flt_mp)
+            rows = self.db.get_moves(q, self._flt_mp)  # search, mp_filter — порядок правильный
             self.mov_table.setRowCount(len(rows))
             for i, r in enumerate(rows):
                 vals = [r["dt"], r["art"], r["pname"] or r["art"],
@@ -170,7 +170,8 @@ class HistoryTab(QWidget):
 
     def _print_move_doc(self):
         """Печать документа перемещения — HTML → браузер → Ctrl+P"""
-        rows = self.db.get_moves(self._flt_mp, limit=9999) if self._flt_mp else self.db.get_moves(limit=9999)
+        # ✅ ИСПРАВЛЕНО: self._flt_mp — это mp_filter, а не search
+        rows = self.db.get_moves("", self._flt_mp, limit=9999)
         if not rows:
             QMessageBox.information(self, "Нет данных", "Нет перемещений для печати")
             return

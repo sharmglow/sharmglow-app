@@ -637,9 +637,10 @@ class SyncTab(QWidget):
                   for p in self.db.get_products("") if p["bc_ozon"]]
         if not stocks:
             self.sig.done.emit("⚠ OZON: нет товаров с штрихкодом"); return
+        # ✅ ИСПРАВЛЕНО: актуальный endpoint /v3/products/stocks (v1 устарел → 404)
         ok = 0
         for i in range(0, len(stocks), 100):
-            self._oz_post("/v1/product/import/stocks", c, k, {"stocks": stocks[i:i+100]})
+            self._oz_post("/v3/products/stocks", c, k, {"stocks": stocks[i:i+100]})
             ok += min(100, len(stocks)-i)
             self._log(f"OZON: отправлено {ok}/{len(stocks)}", "info")
         self.sig.done.emit(f"✓ OZON FBS обновлён: {ok} позиций")
